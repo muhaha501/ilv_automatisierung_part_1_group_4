@@ -1,38 +1,19 @@
 nextflow.enable.dsl=2
 
-/* * PARAMETER
- * Wir nutzen jetzt das Transkriptom statt Genom+GTF
- */
-params.reads = "$baseDir/data/*_{1,2}.fastq.gz"
-params.transcriptome = "$baseDir/genome_Kallisto/Sus_scrofa.Sscrofa11.1.cdna.all.fa"
-params.outdir = "$baseDir/results"
+// Parameters
+params.reads       = "data/*_{1,2}.fastq.gz"
+params.genome_url  = "https://ftp.ensembl.org/pub/release-111/fasta/sus_scrofa/dna/Sus_scrofa.Sscrofa11.1.dna.toplevel.fa.gz"
+params.gtf_url     = "https://ftp.ensembl.org/pub/release-111/gtf/sus_scrofa/Sus_scrofa.Sscrofa11.1.111.gtf.gz"
+params.star_index  = null 
+params.outdir      = "results"
+params.tool        = "STAR"  
+params.transcriptome_url = "https://ftp.ensembl.org/pub/release-115/fasta/sus_scrofa/cdna/Sus_scrofa.Sscrofa11.1.cdna.all.fa.gz"
 
-/*
- * 1. INDEXIEREN (Kallisto)
- * Braucht wenig RAM.
- */
-process KALLISTO_INDEX {
-    tag "Indexing"
-    publishDir "${params.outdir}/kallisto_index", mode: 'copy'
 
-    input:
-    path transcriptome
 
-    output:
-    path "transcriptome.idx"
-
-    script:
-    """
-    kallisto index -i transcriptome.idx ${transcriptome}
-    """
-}
-
-/*
- * 2. QUALITÄTSKONTROLLE (FastQC)
- * 
- */
+// FASTQC Process
 process FASTQC {
-    tag "FASTQC on $sample_id"
+    // container 'quay.io/biocontainers/fastqc:0.11.9--0'
     publishDir "${params.outdir}/fastqc", mode: 'copy'
 
     input:
@@ -43,16 +24,79 @@ process FASTQC {
 
     script:
     """
-    fastqc -q ${reads}
+    fastqc ${reads} 
     """
 }
 
-/*
- * 3. QUANTIFIZIERUNG (Kallisto)
- * Erledigt Mapping und Zählen in einem Schritt.
- */
+// Building of the Index (saved in the results/index directory)
+process BUILD_STAR_INDEX {
+    // container 'quay.io/biocontainers/star:2.6.1d--0'
+    storeDir "${params.outdir}/index" 
+
+    input:
+    path fasta_gz
+    path gtf_gz
+
+    output:
+    path "star_index"
+
+    script:
+    """
+    zcat ${fasta_gz} > genome.fa
+    zcat ${gtf_gz} > genome.gtf
+
+
+    mkdir star_index
+    STAR --runMode genomeGenerate \
+         --genomeDir star_index \
+         --genomeFastaFiles genome.fa \
+         --sjdbGTFfile genome.gtf \
+         --runThreadN 8
+    
+    rm genome.fa genome.gtf
+    """
+}
+
+process STAR_ALIGN {
+    // container 'quay.io/biocontainers/star:2.6.1d--0'
+    publishDir "${params.outdir}/alignment", mode: 'copy'
+
+    input:
+    tuple val(sample_id), path(reads)
+    path index_dir 
+
+    output:
+    tuple val(sample_id), path("${sample_id}Aligned.out.bam")
+
+    script:
+    """
+    STAR --genomeDir $index_dir \
+         --readFilesIn $reads \
+         --readFilesCommand zcat \
+         --outFileNamePrefix ${sample_id} \
+         --outSAMtype BAM Unsorted \
+         --runThreadN 8
+    """
+}
+
+process KALLISTO_INDEX {
+    publishDir "${params.outdir}/kallisto_index", mode: 'copy'
+
+    input:
+    path transcriptome
+
+    output:
+    path "transcriptome.idx"
+
+    script:
+    """
+    zcat ${transcriptome} > transcriptome.fa
+    kallisto index -i transcriptome.idx transcriptome.fa
+    rm transcriptome.fa
+    """
+}
+
 process KALLISTO_QUANT {
-    tag "Quantifying $sample_id"
     publishDir "${params.outdir}/kallisto_counts", mode: 'copy'
 
     input:
@@ -63,23 +107,78 @@ process KALLISTO_QUANT {
     path "${sample_id}"
 
     script:
-    // -b 100: Erstellt 100 Bootstraps (wichtig für statistische Genauigkeit)
-    // ${reads} wird automatisch zu "read1 read2" expandiert
     """
     kallisto quant -i ${index} -o ${sample_id} -b 100 ${reads}
     """
 }
 
+
+process FEATURECOUNTS {
+    // container 'quay.io/biocontainers/subread:2.0.1--h7d7f7ad_1'
+    publishDir "${params.outdir}/counts", mode: 'copy'
+    
+    input:
+    tuple val(sample_id), path(bam)
+    path gtf_gz
+
+    output:
+    path "${sample_id}.featureCounts.txt"
+    path "${sample_id}.featureCounts.txt.summary"
+
+    script:
+    """
+    zcat ${gtf_gz} > annotation.gtf
+
+    featureCounts -p -s 2 -T 8 \\
+                  -a annotation.gtf \\
+                  -o ${sample_id}.featureCounts.txt \\
+                  ${bam}
+
+    rm annotation.gtf
+    """
+}
+
 workflow {
-    // Channels erstellen
-    read_pairs_ch = Channel.fromFilePairs(params.reads, checkIfExists: true)
-    
-    // 1. Index bauen
-    index_ch = KALLISTO_INDEX(file(params.transcriptome))
-    
-    // 2. QC (kann parallel laufen)
+    read_pairs_ch = channel.fromFilePairs(params.reads)
+
     FASTQC(read_pairs_ch)
-    
-    // 3. Quantifizieren (wartet auf Index)
-    KALLISTO_QUANT(read_pairs_ch, index_ch)
+
+    if (params.tool == "STAR") 
+        {
+         run_star(read_pairs_ch)
+        }
+    else if (params.tool == "KALLISTO")
+        {
+         run_kallisto(read_pairs_ch)
+        }
+    else
+        {
+         log.error "Unsupported tool specified: ${params.tool}. Please choose either 'STAR' or 'KALLISTO'."
+        }
+}
+
+workflow run_star {
+    take: reads_ch
+
+    main:
+    gtf_ch = channel.fromPath(params.gtf_url)
+    // Check if STAR index is provided
+    if (params.star_index) {
+        // Existing Index used
+        index_ch = channel.fromPath(params.star_index, checkIfExists: true)
+    } else {
+        // Build Index from Remote Sources
+        fasta_ch = channel.fromPath(params.genome_url)
+        index_ch = BUILD_STAR_INDEX(fasta_ch, gtf_ch)
+    }
+
+    bam_ch = STAR_ALIGN(reads_ch, index_ch)
+    FEATURECOUNTS(bam_ch, gtf_ch)
+}
+
+workflow run_kallisto {
+    take: reads_ch
+    main:
+    index_ch = KALLISTO_INDEX(file(params.transcriptome_url))
+    KALLISTO_QUANT(reads_ch, index_ch)
 }
