@@ -1,50 +1,86 @@
 # ilv_automatisierung_part_1_group_4
 
 
-# Editing this README
+# Pig Transcriptome Analysis Pipeline (GSE159583)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+This Nextflow pipeline is designed to reproduce the transcriptomic analysis of the study:  
+**"Dietary phytonutrients and oxidized vegetable oil improve the immune response and liver metabolism in pigs"** (Le Coz et al., 2021).
 
-## Suggestions for a good README
+## Project Overview
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+-- TOADD PROJECT OVERVIEW --
 
-## Name
-Choose a self-explaining name for your project.
+## Pipeline Features
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+- Quality control of raw RNA-Seq data using FastQC
+- Dual Processing Approach:
+  - Alignment-based quantification using STAR and featureCounts (Use for high Computing Power environments)
+  - Alignment-free quantification using Kallisto (If RAM Acess < 16GB)
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Prerequisites
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+- **Nextflow**
+- **Docker** (Derzeit noch nicht umgesetzt da FH Server kein Docker unterstützt)
+
+
+## Installation & Setup
+
+1. **Clone the Repository**
+
+```bash
+git clone [https://git.fh-campuswien.ac.at/c2410542006/ilv_automatisierung_part_1_group_4.git](https://git.fh-campuswien.ac.at/c2410542006/ilv_automatisierung_part_1_group_4.git)
+cd ilv_automatisierung_part_1_group_4
+```   
+2. **Add the Data**
+
+```bash
+mkdir data
+# Place your FASTQ files in the 'data' directory
+# Example: data/Sample1_1.fastq.gz, data/Sample1_2.fastq.gz
+```
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1. STAR Path:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+nextflow run main.nf --tool STAR
+```
+### Using a Pre-built STAR Index
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+nextflow run main.nf --tool STAR --star_index path/to/your/star_index_directory
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+2. Kallisto Path:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+nextflow run main.nf --tool Kallisto
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Expected Output
 
-## License
-For open source projects, say how it is licensed.
+The output files will be organized in the `results` directory, structured as follows:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+
+
+```
+results/
+├── fastqc/
+│   ├── Sample1_fastqc.html
+│   └── Sample1_fastqc.zip
+├── counts/
+│   ├── Sample1_featurecounts.txt
+│   └── ...
+└── kallisto_counts/
+    ├── Sample1_abundance.tsv
+    └── ...
+``` 
+
+
+## ToDo 
+
+
+- Automate the download of the data from GEO (GSE159583) within the pipeline. (Or additional File)
+- Further analysis steps such as differential expression analysis and visualization have to be added in future versions of this pipeline.
