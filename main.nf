@@ -59,7 +59,7 @@ process BUILD_STAR_INDEX {
 
 process STAR_ALIGN {
     // container 'quay.io/biocontainers/star:2.6.1d--0'
-    publishDir "${params.outdir}/alignment", mode: 'copy'
+    // publishDir "${params.outdir}/alignment", mode: 'copy'
 
     input:
     tuple val(sample_id), path(reads)
@@ -161,15 +161,15 @@ workflow run_star {
     take: reads_ch
 
     main:
-    gtf_ch = channel.fromPath(params.gtf_url)
+    gtf_ch = channel.fromPath(params.gtf_url).collect()
     // Check if STAR index is provided
     if (params.star_index) {
         // Existing Index used
-        index_ch = channel.fromPath(params.star_index, checkIfExists: true)
+        index_ch = channel.fromPath(params.star_index, checkIfExists: true).collect()
     } else {
         // Build Index from Remote Sources
-        fasta_ch = channel.fromPath(params.genome_url)
-        index_ch = BUILD_STAR_INDEX(fasta_ch, gtf_ch)
+        fasta_ch = channel.fromPath(params.genome_url).collect()
+        index_ch = BUILD_STAR_INDEX(fasta_ch, gtf_ch).collect()
     }
 
     bam_ch = STAR_ALIGN(reads_ch, index_ch)
@@ -178,7 +178,8 @@ workflow run_star {
 
 workflow run_kallisto {
     take: reads_ch
+    
     main:
-    index_ch = KALLISTO_INDEX(file(params.transcriptome_url))
+    index_ch = KALLISTO_INDEX(file(params.transcriptome_url)).collect()
     KALLISTO_QUANT(reads_ch, index_ch)
 }
