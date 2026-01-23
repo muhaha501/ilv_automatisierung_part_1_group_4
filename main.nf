@@ -6,7 +6,7 @@ params.docker      = true
 params.tool        = "STAR"  
 
 // STAR PARAMS
-params.max_forks   = 5
+params.max_forks   = 5 // Does nothing have to fix
 
 
 // Files and Directories
@@ -130,8 +130,8 @@ process FEATURECOUNTS {
     path gtf_gz
 
     output:
-    tuple val(sample_id), path("${sample_id}/${sample_id}.featureCounts.txt")
-    tuple val(sample_id), path("${sample_id}/${sample_id}.featureCounts.txt.summary")
+    tuple val(sample_id), path("${sample_id}.featureCounts.txt")
+    tuple val(sample_id), path("${sample_id}.featureCounts.txt.summary")
 
     script:
     """
@@ -139,7 +139,7 @@ process FEATURECOUNTS {
 
     featureCounts -p -s 2 -T 8 \\
                   -a annotation.gtf \\
-                  -o ${sample_id}/${sample_id}.featureCounts.txt \\
+                  -o ${sample_id}.featureCounts.txt \\
                   ${bam}
 
     rm annotation.gtf
