@@ -2,3 +2,5 @@
 /etc
 /results
 /work
+.nextflow.*
+/.nextflow

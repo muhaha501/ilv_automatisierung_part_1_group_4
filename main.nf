@@ -1,26 +1,32 @@
 nextflow.enable.dsl=2
 
 // Parameters
+params.star_index  = null 
+params.docker      = true
+params.tool        = "STAR"  
+
+// STAR PARAMS
+params.max_forks   = 5
+
+
+// Files and Directories
 params.reads       = "data/*_{1,2}.fastq.gz"
 params.genome_url  = "https://ftp.ensembl.org/pub/release-111/fasta/sus_scrofa/dna/Sus_scrofa.Sscrofa11.1.dna.toplevel.fa.gz"
 params.gtf_url     = "https://ftp.ensembl.org/pub/release-111/gtf/sus_scrofa/Sus_scrofa.Sscrofa11.1.111.gtf.gz"
-params.star_index  = null 
-params.outdir      = "results"
-params.tool        = "STAR"  
 params.transcriptome_url = "https://ftp.ensembl.org/pub/release-115/fasta/sus_scrofa/cdna/Sus_scrofa.Sscrofa11.1.cdna.all.fa.gz"
-
+params.outdir      = "results"
 
 
 // FASTQC Process
 process FASTQC {
-    // container 'quay.io/biocontainers/fastqc:0.11.9--0'
+    container 'quay.io/biocontainers/fastqc:0.11.9--0'
     publishDir "${params.outdir}/fastqc", mode: 'copy'
 
     input:
     tuple val(sample_id), path(reads)
 
     output:
-    path "*.{html,zip}"
+    tuple val(sample_id), path("*.{html,zip}")
 
     script:
     """
@@ -30,8 +36,8 @@ process FASTQC {
 
 // Building of the Index (saved in the results/index directory)
 process BUILD_STAR_INDEX {
-    // container 'quay.io/biocontainers/star:2.6.1d--0'
-    storeDir "${params.outdir}/index" 
+    container 'quay.io/biocontainers/star:2.6.1d--0'
+    publishDir "${params.outdir}/index", mode: 'copy'
 
     input:
     path fasta_gz
@@ -58,8 +64,8 @@ process BUILD_STAR_INDEX {
 }
 
 process STAR_ALIGN {
-    // container 'quay.io/biocontainers/star:2.6.1d--0'
-    // publishDir "${params.outdir}/alignment", mode: 'copy'
+    container 'quay.io/biocontainers/star:2.6.1d--0'
+    publishDir "${params.outdir}/alignment", mode: 'copy'
 
     input:
     tuple val(sample_id), path(reads)
@@ -80,7 +86,8 @@ process STAR_ALIGN {
 }
 
 process KALLISTO_INDEX {
-    publishDir "${params.outdir}/kallisto_index", mode: 'copy'
+    container 'quay.io/biocontainers/kallisto:0.46.2--h4f7b962_1'
+    publishDir "${params.outdir}/index/kallisto_index", mode: 'copy'
 
     input:
     path transcriptome
@@ -97,14 +104,15 @@ process KALLISTO_INDEX {
 }
 
 process KALLISTO_QUANT {
-    publishDir "${params.outdir}/kallisto_counts", mode: 'copy'
+    container 'quay.io/biocontainers/kallisto:0.46.2--h4f7b962_1'
+    publishDir "${params.outdir}/counts/kallisto", mode: 'copy'
 
     input:
     tuple val(sample_id), path(reads)
     path index
 
     output:
-    path "${sample_id}"
+    tuple val(sample_id), path("${sample_id}")
 
     script:
     """
@@ -114,16 +122,16 @@ process KALLISTO_QUANT {
 
 
 process FEATURECOUNTS {
-    // container 'quay.io/biocontainers/subread:2.0.1--h7d7f7ad_1'
-    publishDir "${params.outdir}/counts", mode: 'copy'
+    container 'quay.io/biocontainers/subread:2.0.1--h7d7f7ad_1'
+    publishDir "${params.outdir}/counts/STAR", mode: 'copy'
     
     input:
     tuple val(sample_id), path(bam)
     path gtf_gz
 
     output:
-    path "${sample_id}.featureCounts.txt"
-    path "${sample_id}.featureCounts.txt.summary"
+    tuple val(sample_id), path("${sample_id}/${sample_id}.featureCounts.txt")
+    tuple val(sample_id), path("${sample_id}/${sample_id}.featureCounts.txt.summary")
 
     script:
     """
@@ -131,7 +139,7 @@ process FEATURECOUNTS {
 
     featureCounts -p -s 2 -T 8 \\
                   -a annotation.gtf \\
-                  -o ${sample_id}.featureCounts.txt \\
+                  -o ${sample_id}/${sample_id}.featureCounts.txt \\
                   ${bam}
 
     rm annotation.gtf
