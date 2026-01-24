@@ -4,7 +4,7 @@
 # Pig Transcriptome Analysis Pipeline (GSE159583)
 
 This Nextflow pipeline is designed to reproduce the transcriptomic analysis of the study:  
-**"Dietary phytonutrients and oxidized vegetable oil improve the immune response and liver metabolism in pigs"** (Le Coz et al., 2021).
+**"Exploring With Transcriptomic Approaches the Underlying Mechanisms of an Essential Oil-Based Phytogenic in the Small Intestine and Liver of Pigs"** (Le Coz et al., 2021).
 
 ## Project Overview
 
@@ -29,7 +29,7 @@ This Nextflow pipeline is designed to reproduce the transcriptomic analysis of t
 1. **Clone the Repository**
 
 ```bash
-git clone [https://git.fh-campuswien.ac.at/c2410542006/ilv_automatisierung_part_1_group_4.git](https://git.fh-campuswien.ac.at/c2410542006/ilv_automatisierung_part_1_group_4.git)
+git clone https://git.fh-campuswien.ac.at/c2410542006/ilv_automatisierung_part_1_group_4.git
 cd ilv_automatisierung_part_1_group_4
 ```   
 2. **Add the Data**
@@ -59,6 +59,22 @@ nextflow run main.nf --tool STAR --star_index path/to/your/star_index_directory
 nextflow run main.nf --tool Kallisto
 ```
 
+## Parameters
+
+### General Parameters
+
+- `--tool`: Choose between `STAR` or `Kallisto` for the quantification method.
+- `--reads`: Path to the directory containing FASTQ files (default: `data/`).
+- `--output_dir`: Path to the output directory (default: `results/`).
+- `--docker`: Use Docker containers for the pipeline (default: true).
+
+### Reference Data
+
+- `--genome_url`: URL to download the reference genome FASTA file.
+- `--gtf_url`: URL to download the GTF annotation file.
+- `--transcriptome_url`: URL to download the transcriptome FASTA file.
+
+
 ## Expected Output
 
 The output files will be organized in the `results` directory, structured as follows:
@@ -67,15 +83,24 @@ The output files will be organized in the `results` directory, structured as fol
 
 ```
 results/
+├── alignment/
+│   ├── Sample1_Aligned.out.bam
+│   └── ...
+├── counts/
+│   ├── kallisto/
+│   │   ├── Sample1/
+│   │   │   └── abundance.tsv
+│   │   └── ...
+│   └── STAR
+│       ├── Sample1_featurecounts.txt
+│       └── ...
 ├── fastqc/
 │   ├── Sample1_fastqc.html
-│   └── Sample1_fastqc.zip
-├── counts/
-│   ├── Sample1_featurecounts.txt
+│   ├── Sample1_fastqc.zip
 │   └── ...
-└── kallisto_counts/
-    ├── Sample1_abundance.tsv
-    └── ...
+└── index/
+    ├── kallisto_index/
+    └── star_index/
 ``` 
 
 
