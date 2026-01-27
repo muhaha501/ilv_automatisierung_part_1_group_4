@@ -109,3 +109,22 @@ results/
 
 - Automate the download of the data from GEO (GSE159583) within the pipeline. (Or additional File)
 - Further analysis steps such as differential expression analysis and visualization have to be added in future versions of this pipeline.
+
+# Changes from *main*
+
+- **pre-downloaded** 
+  - genome_url
+    - Sus_scrofa.Sscrofa11.1.dna.toplevel.fa.gz
+  - gtf_url
+    - Sus_scrofa.Sscrofa11.1.104.gtf.gz
+  - and changed the variables to the direct path in `main.nf`
+- **feature-count**
+  - new container image
+    - quay.io/biocontainers/subread:2.1.1--h577a1d6_0
+  - slight change to pass the function correctly to the container
+    -  line 171: each gtf_gz $\rightarrow$ each path(gtf_gz)
+- **post-processing**
+  - new container image
+    - quay.io/biocontainers/scanpy:1.4.4--py_0
+- **other**
+  - some changes for threads and concurrent jobs in the `main.nf` and `nextflow.config` files to suit a specific server
