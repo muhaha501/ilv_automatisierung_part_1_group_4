@@ -1,5 +1,8 @@
 nextflow.enable.dsl=2
 
+// ============================================
+// Data collection: Download or local files
+// ============================================
 
 // Process to download SRA data using prefetch + fasterq-dump (only if not already present)
 process DOWNLOAD_SRA {
@@ -40,7 +43,11 @@ process DOWNLOAD_SRA {
     """
 }
 
-// FASTQC Process
+// ============================================
+// Pre-processing: QC, Alignment/Quantification
+// ============================================
+
+// Quality Control with FastQC
 process FASTQC {
     container 'quay.io/biocontainers/fastqc:0.11.9--0'
     publishDir "${params.outdir}/fastqc", mode: 'copy'
@@ -58,6 +65,8 @@ process FASTQC {
     """
 }
 
+
+// STAR Alignment and FeatureCounts Quantification
 // Building of the Index (saved in the results/index directory)
 process BUILD_STAR_INDEX {
     container 'quay.io/biocontainers/star:2.6.1d--0'
@@ -108,6 +117,32 @@ process STAR_ALIGN {
     """
 }
 
+process FEATURECOUNTS {
+    container 'quay.io/biocontainers/subread:2.1.1--h577a1d6_0'
+    publishDir "${params.outdir}/counts/STAR", mode: 'copy'
+    
+    input:
+    tuple val(sample_id), path(bam)
+    each path(gtf_gz)
+
+    output:
+    tuple val(sample_id), path("${sample_id}.featureCounts.txt"), emit: counts
+    tuple val(sample_id), path("${sample_id}.featureCounts.txt.summary"), emit: summary
+
+    script:
+    """
+    zcat ${gtf_gz} > annotation.gtf
+
+    featureCounts -p -s 2 -T 8 \\
+                  -a annotation.gtf \\
+                  -o ${sample_id}.featureCounts.txt \\
+                  ${bam}
+
+    rm annotation.gtf
+    """
+}
+
+// Kallisto Index and Quantification
 process KALLISTO_INDEX {
     container 'quay.io/biocontainers/kallisto:0.46.2--h4f7b962_1'
     publishDir "${params.outdir}/index/kallisto_index", mode: 'copy'
@@ -143,38 +178,13 @@ process KALLISTO_QUANT {
     """
 }
 
-process FEATURECOUNTS {
-    container 'quay.io/biocontainers/subread:2.0.1--h7d7f7ad_1'
-    publishDir "${params.outdir}/counts/STAR", mode: 'copy'
-    
-    input:
-    tuple val(sample_id), path(bam)
-    each gtf_gz
-
-    output:
-    tuple val(sample_id), path("${sample_id}.featureCounts.txt"), emit: counts
-    tuple val(sample_id), path("${sample_id}.featureCounts.txt.summary"), emit: summary
-
-    script:
-    """
-    zcat ${gtf_gz} > annotation.gtf
-
-    featureCounts -p -s 2 -T 8 \\
-                  -a annotation.gtf \\
-                  -o ${sample_id}.featureCounts.txt \\
-                  ${bam}
-
-    rm annotation.gtf
-    """
-}
-
 // ============================================
 // POST-PROCESSING: QC, Visualization & DESeq2
 // ============================================
 
 // Bulk RNA-seq QC and Exploratory Analysis
 process RNASEQ_QC_ANALYSIS {
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127fcae6b6bdaf8181e21a26ae61571f297571a-0'
+    container 'quay.io/biocontainers/scanpy:1.4.4--py_0'
     publishDir "${params.outdir}/analysis/qc", mode: 'copy'
 
     input:
@@ -341,7 +351,7 @@ process RNASEQ_QC_ANALYSIS {
 
 // Differential Expression Analysis
 process DIFFERENTIAL_EXPRESSION {
-    container 'quay.io/biocontainers/mulled-v2-8186960447c5cb2faa697666dc1e6d919ad23f3e:3127fcae6b6bdaf8181e21a26ae61571f297571a-0'
+    container 'quay.io/biocontainers/scanpy:1.4.4--py_0'
     publishDir "${params.outdir}/analysis/deseq2", mode: 'copy'
 
     input:
@@ -475,6 +485,7 @@ process DIFFERENTIAL_EXPRESSION {
     """
 }
 
+// Convert Kallisto output to FeatureCounts-like format
 process KALLISTO_TO_COUNTS {
     container 'quay.io/biocontainers/kallisto:0.46.2--h4f7b962_1'
 
@@ -498,7 +509,7 @@ workflow {
     // Determine input source: SRA download or local files
     if (params.download_sra) {
         // Generate SRA IDs from SRR12835320 to SRR12835344 (excluding SRR12835340)
-        sra_ids_ch = Channel
+        sra_ids_ch = channel
             .from(12835320..12835344)
             .filter { it != 12835340 }  // SRR12835340 doesn't exist in the dataset
             .map { "SRR${it}" }
@@ -508,14 +519,14 @@ workflow {
             .map { sid, r1, r2 -> tuple(sid, [r1, r2]) }  // make it look like fromFilePairs output
         
         // Combine downloaded files with existing local files
-        existing_ch = Channel.fromFilePairs("${params.fastq_dir}/*_{1,2}.fastq.gz")
+        existing_ch = channel.fromFilePairs("${params.fastq_dir}/*_{1,2}.fastq.gz")
         read_pairs_ch = existing_ch.mix(downloaded_ch)
         
         log.info "Downloading SRA data: SRR12835320 to SRR12835344"
         log.info "Existing files in ${params.fastq_dir} will be reused"
     } else {
         // Use local files only
-        read_pairs_ch = Channel.fromFilePairs(params.reads)
+        read_pairs_ch = channel.fromFilePairs(params.reads)
         log.info "Using local FASTQ files: ${params.reads}"
     }
 
@@ -532,20 +543,21 @@ workflow {
     }
 }
 
+// STAR based workflow till FeatureCounts quantification
 workflow run_star {
     take: reads_ch
 
     main:
     // Prepare GTF channel (in DSL2, channels can be reused directly)
-    gtf_ch = Channel.fromPath(params.gtf_url)
+    gtf_ch = channel.fromPath(params.gtf_url)
 
     // Check if STAR index is provided
     if (params.star_index) {
         // Use existing index
-        index_ch = Channel.fromPath(params.star_index, checkIfExists: true)
+        index_ch = channel.fromPath(params.star_index, checkIfExists: true)
     } else {
         // Build index from remote sources
-        fasta_ch = Channel.fromPath(params.genome_url)
+        fasta_ch = channel.fromPath(params.genome_url)
         index_ch = BUILD_STAR_INDEX(fasta_ch, gtf_ch)
     }
 
@@ -560,11 +572,12 @@ workflow run_star {
     run_post_processing(all_counts)
 }
 
+// Kallisto based workflow till file conversion to FeatureCounts-like format
 workflow run_kallisto {
     take: reads_ch
     
     main:
-    transcriptome_ch = Channel.fromPath(params.transcriptome_url)
+    transcriptome_ch = channel.fromPath(params.transcriptome_url)
     index_ch         = KALLISTO_INDEX(transcriptome_ch)
     quant_out = KALLISTO_QUANT(reads_ch, index_ch)
 
@@ -575,14 +588,13 @@ workflow run_kallisto {
     run_post_processing(all_counts)
 }
 
+// Run post-processing: QC and DE analysis
 workflow run_post_processing {
     take: all_counts
 
     main:
-    // Run QC and exploratory analysis
     qc_results = RNASEQ_QC_ANALYSIS(all_counts)
     
-    // Run differential expression analysis
     DIFFERENTIAL_EXPRESSION(
         qc_results.counts,
         qc_results.metadata
