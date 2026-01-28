@@ -6,9 +6,6 @@
 This Nextflow pipeline is designed to reproduce the transcriptomic analysis of the study:  
 **"Exploring With Transcriptomic Approaches the Underlying Mechanisms of an Essential Oil-Based Phytogenic in the Small Intestine and Liver of Pigs"** (Le Coz et al., 2021).
 
-## Project Overview
-
--- TOADD PROJECT OVERVIEW --
 
 ## Pipeline Features
 
@@ -171,3 +168,18 @@ results/
 | **Kallisto** | `kallisto:0.46.2--h4f7b962_1` | 0.46.2 | 
 | **Subread** | `subread:2.1.1--h577a1d6_0` | 2.1.1 | 
 | **Scanpy / Python** | `scanpy:1.4.4--py_0` | 1.4.4 |
+
+
+## Project Overview
+
+The study investigates the impact of phytogenic feed additives on gene expression in weaning piglets. The goal was to investigate an alternative to antibiotic growth promoters.
+
+Therefore tissue samples of the liver and the illeum were taken form waened piglets. RNA-Sequencing was used to check the expression level of the samples to check which pathways were activated or supresed.
+
+Findungs: 
+
+The paper showed positive modulation of an anti-inflammatory response in the Illium sample, as well as a positive regulation of metabolic Regulation and homeostasis. 
+
+Conclusion: 
+
+The Authors conclude an energy sparing effect as well as increased resiliance and systemic support with the use of PFAs in feed for pigs.
