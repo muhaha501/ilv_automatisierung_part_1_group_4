@@ -1,24 +1,5 @@
 nextflow.enable.dsl=2
 
-// Parameters
-params.star_index  = null 
-params.docker      = true
-params.tool        = "STAR"  
-
-// SRA download parameters
-params.download_sra   = false // Set to true to download from SRA instead of using local files
-params.fastq_dir      = "data"  // Directory to check for existing FASTQ files
-
-// STAR PARAMS
-params.max_forks   = 5 // Currently unused
-
-
-// Files and Directories
-params.reads       = "data/*_{1,2}.fastq.gz"
-params.genome_url  = "https://ftp.ensembl.org/pub/release-111/fasta/sus_scrofa/dna/Sus_scrofa.Sscrofa11.1.dna.toplevel.fa.gz"
-params.gtf_url     = "https://ftp.ensembl.org/pub/release-111/gtf/sus_scrofa/Sus_scrofa.Sscrofa11.1.111.gtf.gz"
-params.transcriptome_url = "https://ftp.ensembl.org/pub/release-115/fasta/sus_scrofa/cdna/Sus_scrofa.Sscrofa11.1.cdna.all.fa.gz"
-params.outdir      = "results"
 
 // Process to download SRA data using prefetch + fasterq-dump (only if not already present)
 process DOWNLOAD_SRA {
@@ -494,6 +475,25 @@ process DIFFERENTIAL_EXPRESSION {
     """
 }
 
+process KALLISTO_TO_COUNTS {
+    container 'quay.io/biocontainers/kallisto:0.46.2--h4f7b962_1'
+
+    input:
+    tuple val(sample_id), path(kallisto_dir)
+
+    output:
+    path "${sample_id}.featureCounts.txt"
+
+    script:
+    """
+    echo "# Program:kallisto; Command:quant" > ${sample_id}.featureCounts.txt
+    
+    echo -e "Geneid\\tChr\\tStart\\tEnd\\tStrand\\tLength\\t${sample_id}" >> ${sample_id}.featureCounts.txt
+    
+    tail -n +2 ${kallisto_dir}/abundance.tsv | awk -F'\\t' '{OFS="\\t"; print \$1, "NA", "NA", "NA", "NA", \$2, \$4}' >> ${sample_id}.featureCounts.txt
+    """
+}
+
 workflow {
     // Determine input source: SRA download or local files
     if (params.download_sra) {
@@ -557,14 +557,7 @@ workflow run_star {
         .map { sample_id, fc_file -> fc_file }
         .collect()
 
-    // Run QC and exploratory analysis
-    qc_results = RNASEQ_QC_ANALYSIS(all_counts)
-    
-    // Run differential expression analysis
-    DIFFERENTIAL_EXPRESSION(
-        qc_results.counts,
-        qc_results.metadata
-    )
+    run_post_processing(all_counts)
 }
 
 workflow run_kallisto {
@@ -573,5 +566,25 @@ workflow run_kallisto {
     main:
     transcriptome_ch = Channel.fromPath(params.transcriptome_url)
     index_ch         = KALLISTO_INDEX(transcriptome_ch)
-    KALLISTO_QUANT(reads_ch, index_ch)
+    quant_out = KALLISTO_QUANT(reads_ch, index_ch)
+
+    kallisto_counts = KALLISTO_TO_COUNTS(quant_out)
+
+    all_counts = kallisto_counts.collect()
+
+    run_post_processing(all_counts)
+}
+
+workflow run_post_processing {
+    take: all_counts
+
+    main:
+    // Run QC and exploratory analysis
+    qc_results = RNASEQ_QC_ANALYSIS(all_counts)
+    
+    // Run differential expression analysis
+    DIFFERENTIAL_EXPRESSION(
+        qc_results.counts,
+        qc_results.metadata
+    )
 }
