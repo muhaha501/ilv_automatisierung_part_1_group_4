@@ -1,0 +1,4 @@
+Samples: 24
+Genes: 31908
+Library sizes: 37982470 - 84391050
+Genes detected: 16707 - 18823
